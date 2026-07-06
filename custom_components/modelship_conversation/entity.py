@@ -105,7 +105,6 @@ from .const import (
     RECOMMENDED_WEB_SEARCH_INLINE_CITATIONS,
     UNSUPPORTED_EXTENDED_CACHE_RETENTION_MODELS,
 )
-from . import modelship  # modelship: all fork-specific behaviour lives here
 
 if TYPE_CHECKING:
     from . import OpenAIConfigEntry
@@ -511,8 +510,6 @@ class OpenAIBaseLLMEntity(Entity):
 
         messages = _convert_content_to_param(chat_log.content)
 
-        messages = modelship.apply_stateless(options, messages)  # modelship
-
         model_args = ResponseCreateParamsStreaming(
             model=options.get(CONF_CHAT_MODEL, RECOMMENDED_CHAT_MODEL),
             input=messages,
@@ -558,16 +555,12 @@ class OpenAIBaseLLMEntity(Entity):
         ):
             model_args["prompt_cache_retention"] = "24h"
 
-        force_tool: str | None = None  # modelship
         tools: list[ToolParam] = []
         if chat_log.llm_api:
             tools = [
                 _format_tool(tool, chat_log.llm_api.custom_serializer)
                 for tool in chat_log.llm_api.tools
             ]
-            force_tool = await modelship.prepare_tools(  # modelship
-                self.hass, options, tools, chat_log
-            )
 
         remove_citations = False
         if options.get(CONF_WEB_SEARCH):
@@ -637,9 +630,6 @@ class OpenAIBaseLLMEntity(Entity):
         if tools:
             model_args["tools"] = tools
 
-        # modelship: pin the narrower's chosen tool for the first turn (live-state queries).
-        forced_first_turn = modelship.force_first_tool(force_tool, tools, model_args)
-
         last_content = chat_log.content[-1]
 
         # Handle attachments by adding them to the last user message
@@ -679,8 +669,11 @@ class OpenAIBaseLLMEntity(Entity):
                     self.entity_id,
                     _transform_stream(chat_log, stream, remove_citations),
                 )
-                new_content = [content async for content in content_stream]
-                messages.extend(_convert_content_to_param(new_content))
+                messages.extend(
+                    _convert_content_to_param(
+                        [content async for content in content_stream]
+                    )
+                )
             except openai.RateLimitError as err:
                 if (
                     model_args["service_tier"] == "flex"
@@ -719,18 +712,7 @@ class OpenAIBaseLLMEntity(Entity):
                 LOGGER.error("Error talking to OpenAI: %s", err)
                 raise HomeAssistantError("Error talking to OpenAI") from err
 
-            # modelship: release the one-shot forced tool_choice after the first call.
-            forced_first_turn = modelship.release_forced_tool(
-                forced_first_turn, model_args
-            )
-
             if not chat_log.unresponded_tool_results:
-                break
-
-            # modelship: stop as soon as a control intent succeeds (small models loop).
-            if modelship.stop_after_action(
-                options, new_content, chat_log, self.entity_id
-            ):
                 break
 
 

@@ -10,7 +10,7 @@ It is a thin fork of Home Assistant Core's `openai_conversation` integration
 the `/v1/responses` adapter that this integration drives — so the upstream
 conversation entity, the Assist LLM tool loop (native HA control), streaming,
 STT and TTS all work unchanged against your own hardware. The fork adds exactly
-two things the official integration lacks:
+two things the official integration lacks, and nothing else:
 
 - a configurable **base URL**, so it can reach your Modelship instance, and
 - an **optional API key** (Modelship needs none; a dummy `sk-noauth` is sent if
@@ -67,48 +67,56 @@ the voice to a real Kokoro ID once you want a specific voice.
 
 ## Re-syncing the fork against upstream
 
-The merge base is pinned in [`NOTICE`](NOTICE). All fork-specific *behaviour*
-lives in standalone modules that upstream never ships, so re-syncing only ever
-touches the upstream files at a handful of one-line hook points:
+The merge base is pinned in [`NOTICE`](NOTICE), and the `manifest.json`
+`version` always matches it, so "what upstream release is this fork on" is a
+single fact, not two. `conversation.py`, `ai_task.py`, `stt.py`, `tts.py` are
+byte-identical to upstream — copied over as-is. Every other file only differs
+from upstream at a handful of points, all branding/connection plumbing:
 
-| Module (ours only) | What it holds |
-|--------------------|---------------|
-| `modelship.py`     | Facade: small-model option constants/defaults, the runtime hooks (`apply_stateless`, `prepare_tools`, `force_first_tool`, `release_forced_tool`, `stop_after_action`) and the config-flow `add_options_schema` helper |
-| `history.py`       | `drop_history` — stateless mode |
-| `tool_enums.py`    | `inject_assist_enums` — constrain device-tool args to exposed values |
-| `tool_narrower.py` | `narrow_tools` — trim the tool list per utterance |
+- `manifest.json` — domain/name/codeowners/urls, `iot_class: local_polling`,
+  `version` pinned to the upstream tag, drop `quality_scale`.
+- `const.py` — rename `DOMAIN`/default names, add the `CONF_BASE_URL`
+  connection block (`CONF_BASE_URL`, `DEFAULT_BASE_URL`, `DEFAULT_API_KEY`).
+- `__init__.py` — build `AsyncOpenAI(base_url=…, api_key=… or DEFAULT_API_KEY)`;
+  drop the deprecated `generate_*` services and the legacy migrations.
+- `config_flow.py` — add required `CONF_BASE_URL`, make the API key optional,
+  validate against `{base_url}/models`, retitle the entry to "Modelship".
+- `strings.json` / `translations/en.json` — repoint
+  `component::openai_conversation::` key references to
+  `component::modelship_conversation::`, add the base-URL field/description,
+  rebrand the user step, drop the deprecated-service `issues`/`services` blocks.
+- delete `services.yaml`, `quality_scale.yaml`, `icons.json`.
 
-`conversation.py`, `ai_task.py`, `stt.py`, `tts.py` are byte-identical to
-upstream — copy them straight over, no edits.
+### Automated sync
 
-To update:
+[`.github/workflows/sync-upstream.yml`](.github/workflows/sync-upstream.yml)
+runs weekly (and on demand via `workflow_dispatch`). It checks
+`home-assistant/core`'s latest release; if it's newer than the tag pinned in
+`NOTICE`, it fetches that release's `openai_conversation` component and runs
+[`.github/sync/sync_upstream.py`](.github/sync/sync_upstream.py), then opens a
+PR with the result:
+
+- The byte-identical files are copied straight over.
+- `const.py`, `__init__.py`, `config_flow.py` get a fresh upstream copy with
+  the corresponding patch in `.github/sync/patches/` applied on top.
+- `manifest.json` and `strings.json`/`translations/en.json` get a structured
+  rebrand transform (see `rebrand_manifest`/`rebrand_strings` in the script).
+
+If upstream has changed a patched file enough that a patch no longer applies,
+that one file is left untouched (not partially patched) and the PR is opened
+as a draft with the conflict called out — everything else still syncs. Update
+the stale patch under `.github/sync/patches/` and re-run to resolve.
+
+Note: the workflow uses the default `GITHUB_TOKEN` to push a branch and open
+the PR, which requires *Settings → Actions → General → "Allow GitHub Actions
+to create and approve pull requests"* to be enabled on this repo.
+
+To do the same by hand:
 
 1. Copy `homeassistant/components/openai_conversation/` from the newer Core tag
-   (keeping our `modelship.py`, `history.py`, `tool_enums.py`, `tool_narrower.py`).
-2. Re-apply the delta set (everything below is branding/connection plumbing
-   except the two one-line `modelship.*` hooks):
-   - `manifest.json` — domain/name/codeowners/urls, `iot_class: local_polling`,
-     add `version`, drop `quality_scale`.
-   - `const.py` — rename `DOMAIN`/default names, add the `CONF_BASE_URL`
-     connection block. (Feature constants now live in `modelship.py`.)
-   - `__init__.py` — build `AsyncOpenAI(base_url=…, api_key=… or "sk-noauth")`;
-     drop the deprecated `generate_*` services and the legacy migrations.
-   - `config_flow.py` — add required `CONF_BASE_URL`, make the API key optional,
-     validate against `{base_url}/models`, retitle the entry; add
-     `from . import modelship` and the `modelship.add_options_schema(step_schema)`
-     call in the conversation options step.
-   - `entity.py` — add `from . import modelship`, then the five hook one-liners
-     in `_async_handle_chat_log`: `apply_stateless`, `prepare_tools` (after the
-     tool list is built), `force_first_tool` (before the loop),
-     `release_forced_tool` and `stop_after_action` (in the loop). The loop body
-     also keeps `new_content` in a local so `stop_after_action` can read it.
-   - `strings.json` / `translations/en.json` — repoint
-     `component::openai_conversation::` key references to
-     `component::modelship_conversation::`, add the base-URL field, the three
-     small-model toggles (`narrow_tools`, `stop_after_action`, `stateless`),
-     rebrand.
-   - delete `services.yaml`, `quality_scale.yaml`; trim `icons.json`.
-3. Bump the merge-base tag in `NOTICE`.
+   straight over `custom_components/modelship_conversation/`.
+2. Re-apply the delta set above.
+3. Bump the merge-base tag in `NOTICE` and the `version` in `manifest.json`.
 
 ## License
 

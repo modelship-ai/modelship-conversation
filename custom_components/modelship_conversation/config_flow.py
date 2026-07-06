@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 import json
 import logging
-from typing import Any
+from typing import Any, override
 
 import openai
 import voluptuous as vol
@@ -103,7 +103,6 @@ from .const import (
     UNSUPPORTED_PRIORITY_SERVICE_TIERS_MODELS,
     UNSUPPORTED_WEB_SEARCH_MODELS,
 )
-from . import modelship  # modelship: all fork-specific behaviour lives here
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -135,6 +134,7 @@ class OpenAIConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 2
     MINOR_VERSION = 7
 
+    @override
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -219,6 +219,7 @@ class OpenAIConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @classmethod
     @callback
+    @override
     def async_get_supported_subentry_types(
         cls, config_entry: ConfigEntry
     ) -> dict[str, type[ConfigSubentryFlow]]:
@@ -409,8 +410,6 @@ class OpenAISubentryFlowHandler(ConfigSubentryFlow):
             )
         elif CONF_CODE_INTERPRETER in options:
             options.pop(CONF_CODE_INTERPRETER)
-
-        modelship.add_options_schema(step_schema)  # modelship: small-model toggles
 
         if reasoning_options := self._get_reasoning_options(model):
             step_schema.update(

@@ -1,0 +1,103 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout modelship-conversation
+        uses: actions/checkout@v4
+
+      - name: Find latest Home Assistant Core release
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/home-assistant/core/releases/latest --jq .tag_name)
+          pinned=$(grep -oP 'Merge base: tag \K\S+' NOTICE)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          if [ "$tag" = "$pinned" ]; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch upstream component at ${{ steps.latest.outputs.tag }}
+        if: steps.latest.outputs.up_to_date == 'false'
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse \
+            --branch "${{ steps.latest.outputs.tag }}" \
+            https://github.com/home-assistant/core.git /tmp/ha-core
+          git -C /tmp/ha-core sparse-checkout set homeassistant/components/openai_conversation
+
+      - name: Run sync
+        if: steps.latest.outputs.up_to_date == 'false'
+        id: sync
+        run: |
+          set +e
+          python3 .github/sync/sync_upstream.py \
+            "${{ steps.latest.outputs.tag }}" \
+            /tmp/ha-core/homeassistant/components/openai_conversation \
+            > /tmp/sync-log.txt 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          cat /tmp/sync-log.txt
+
+      - name: Open pull request
+        if: steps.latest.outputs.up_to_date == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TAG: ${{ steps.latest.outputs.tag }}
+          OLD_TAG: ${{ steps.latest.outputs.pinned }}
+          EXIT_CODE: ${{ steps.sync.outputs.exit_code }}
+        run: |
+          if git diff --quiet; then
+            echo "Sync produced no file changes, nothing to do."
+            exit 0
+          fi
+
+          branch="sync-upstream/$NEW_TAG"
+          git checkout -b "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: sync upstream openai_conversation to $NEW_TAG"
+          git push -u origin "$branch"
+
+          {
+            echo "Automated sync of \`custom_components/modelship_conversation\` from"
+            echo "Home Assistant Core's \`openai_conversation\` at tag \`$NEW_TAG\`"
+            echo "(previously \`$OLD_TAG\`)."
+            echo
+            echo "### Sync log"
+            echo '```'
+            cat /tmp/sync-log.txt
+            echo '```'
+            if [ "$EXIT_CODE" != "0" ]; then
+              echo
+              echo "**One or more files conflicted and were left unchanged** — see the"
+              echo "log above. Resolve them manually against the new upstream tag before"
+              echo "merging (update the corresponding patch in \`.github/sync/patches/\`"
+              echo "if the delta itself needs to change)."
+            fi
+          } > /tmp/pr-body.txt
+
+          draft_flag=""
+          if [ "$EXIT_CODE" != "0" ]; then
+            draft_flag="--draft"
+          fi
+
+          gh pr create \
+            --title "chore: sync upstream to $NEW_TAG" \
+            --body-file /tmp/pr-body.txt \
+            --base main \
+            --head "$branch" \
+            $draft_flag

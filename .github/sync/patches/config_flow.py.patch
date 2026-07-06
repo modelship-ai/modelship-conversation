@@ -1,0 +1,66 @@
+--- a/config_flow.py	2026-07-06 20:36:56.905145535 +0000
++++ b/config_flow.py	2026-07-06 20:36:56.908145596 +0000
+@@ -1,4 +1,4 @@
+-"""Config flow for OpenAI Conversation integration."""
++"""Config flow for Modelship Conversation integration."""
+ 
+ from collections.abc import Mapping
+ import json
+@@ -45,6 +45,7 @@
+ from homeassistant.helpers.typing import VolDictType
+ 
+ from .const import (
++    CONF_BASE_URL,
+     CONF_CHAT_MODEL,
+     CONF_CODE_INTERPRETER,
+     CONF_IMAGE_MODEL,
+@@ -67,6 +68,8 @@
+     CONF_WEB_SEARCH_TIMEZONE,
+     CONF_WEB_SEARCH_USER_LOCATION,
+     DEFAULT_AI_TASK_NAME,
++    DEFAULT_API_KEY,
++    DEFAULT_BASE_URL,
+     DEFAULT_CONVERSATION_NAME,
+     DEFAULT_STT_NAME,
+     DEFAULT_STT_PROMPT,
+@@ -105,7 +108,9 @@
+ 
+ STEP_USER_DATA_SCHEMA = vol.Schema(
+     {
+-        vol.Required(CONF_API_KEY): str,
++        vol.Required(CONF_BASE_URL, default=DEFAULT_BASE_URL): str,
++        # Modelship needs no auth; leave blank to use a dummy key.
++        vol.Optional(CONF_API_KEY): str,
+     }
+ )
+ 
+@@ -116,7 +121,9 @@
+     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
+     """
+     client = openai.AsyncOpenAI(
+-        api_key=data[CONF_API_KEY], http_client=get_async_client(hass)
++        base_url=data[CONF_BASE_URL],
++        api_key=data.get(CONF_API_KEY) or DEFAULT_API_KEY,
++        http_client=get_async_client(hass),
+     )
+     await client.models.list(timeout=10.0)
+ 
+@@ -152,7 +159,7 @@
+                         self._get_reauth_entry(), data_updates=user_input
+                     )
+                 return self.async_create_entry(
+-                    title="ChatGPT",
++                    title="Modelship",
+                     data=user_input,
+                     subentries=[
+                         {
+@@ -631,7 +638,8 @@
+         zone_home = self.hass.states.get(ENTITY_ID_HOME)
+         if zone_home is not None:
+             client = openai.AsyncOpenAI(
+-                api_key=self._get_entry().data[CONF_API_KEY],
++                base_url=self._get_entry().data[CONF_BASE_URL],
++                api_key=self._get_entry().data.get(CONF_API_KEY) or DEFAULT_API_KEY,
+                 http_client=get_async_client(self.hass),
+             )
+             location_schema = vol.Schema(
