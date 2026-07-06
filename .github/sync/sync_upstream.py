@@ -105,16 +105,14 @@ def rebrand_manifest(upstream_path: Path, new_version: str) -> None:
         data.pop(key, None)
     data.update(MANIFEST_OVERRIDES)
     data["version"] = new_version
-    # Keep upstream's key order where possible, our overrides appended after.
-    ordered = {k: data[k] for k in upstream_path_keys(upstream_path) if k in data}
-    for k, v in data.items():
-        ordered.setdefault(k, v)
+    # hassfest requires domain, name, then strictly alphabetical order.
+    pinned = ["domain", "name"]
+    ordered = {k: data[k] for k in pinned}
+    for k in sorted(data):
+        if k not in pinned:
+            ordered[k] = data[k]
     text = _compact_string_arrays(json.dumps(ordered, indent=2)) + "\n"
     (DEST / "manifest.json").write_text(text)
-
-
-def upstream_path_keys(path: Path) -> list[str]:
-    return list(json.loads(path.read_text()).keys())
 
 
 def rebrand_strings(upstream_path: Path) -> bool:
