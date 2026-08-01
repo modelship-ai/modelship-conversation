@@ -33,9 +33,9 @@ MANIFEST_OVERRIDES = {
     "domain": "modelship_conversation",
     "name": "Modelship Conversation",
     "codeowners": ["@alez007"],
-    "documentation": "https://github.com/alez007/modelship-conversation",
+    "documentation": "https://github.com/modelship-ai/modelship-conversation",
     "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/alez007/modelship-conversation/issues",
+    "issue_tracker": "https://github.com/modelship-ai/modelship-conversation/issues",
 }
 MANIFEST_DROP = ["quality_scale"]
 

@@ -2,7 +2,7 @@
 
 A Home Assistant conversation/voice integration that points the
 [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation)
-experience at a local [Modelship](https://github.com/alez007/modelship) server
+experience at a local [Modelship](https://github.com/modelship-ai/modelship) server
 instead of api.openai.com.
 
 It is a thin fork of Home Assistant Core's `openai_conversation` integration
@@ -33,7 +33,7 @@ conversation → TTS) to Modelship over plain HTTP, with no Wyoming bridge.
 ## Installation (HACS, custom repository)
 
 1. HACS → ⋮ → **Custom repositories**.
-2. URL: `https://github.com/alez007/modelship-conversation`, category
+2. URL: `https://github.com/modelship-ai/modelship-conversation`, category
    **Integration**.
 3. Install **Modelship Conversation**, then restart Home Assistant.
 4. **Settings → Devices & Services → Add Integration → Modelship Conversation.**
