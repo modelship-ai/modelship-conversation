@@ -70,7 +70,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "chore: sync upstream openai_conversation to $NEW_TAG"
-          git push -u origin "$branch"
+          # Force-push: this branch is exclusively bot-managed, so a leftover
+          # from a previous run that failed after pushing (e.g. PR creation
+          # failed) must not block re-syncing the same tag.
+          git push -f -u origin "$branch"
 
           {
             echo "Automated sync of \`custom_components/modelship_conversation\` from"
@@ -95,9 +98,15 @@ jobs:
             draft_flag="--draft"
           fi
 
-          gh pr create \
-            --title "chore: sync upstream to $NEW_TAG" \
-            --body-file /tmp/pr-body.txt \
-            --base main \
-            --head "$branch" \
-            $draft_flag
+          existing_pr=$(gh pr list --head "$branch" --state open --json number -q '.[0].number')
+          if [ -n "$existing_pr" ]; then
+            echo "PR #$existing_pr already open for $branch, updating body instead of creating a new one."
+            gh pr edit "$existing_pr" --body-file /tmp/pr-body.txt
+          else
+            gh pr create \
+              --title "chore: sync upstream to $NEW_TAG" \
+              --body-file /tmp/pr-body.txt \
+              --base main \
+              --head "$branch" \
+              $draft_flag
+          fi
