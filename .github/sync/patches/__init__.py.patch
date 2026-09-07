@@ -1,5 +1,5 @@
---- a/__init__.py	2026-07-06 20:36:56.905145535 +0000
-+++ b/__init__.py	2026-07-06 20:36:56.907145576 +0000
+--- a/__init__.py
++++ b/__init__.py
 @@ -1,73 +1,16 @@
 -"""The OpenAI Conversation integration."""
 -
@@ -39,14 +39,8 @@
 -    issue_registry as ir,
 -    selector,
 -)
-+
-+from homeassistant.config_entries import ConfigEntry
-+from homeassistant.const import CONF_API_KEY, Platform
-+from homeassistant.core import HomeAssistant
-+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-+from homeassistant.helpers import config_validation as cv
- from homeassistant.helpers.httpx_client import get_async_client
- from homeassistant.helpers.typing import ConfigType
+-from homeassistant.helpers.httpx_client import get_async_client
+-from homeassistant.helpers.typing import UNDEFINED, ConfigType, UndefinedType
  
 -from .const import (
 -    CONF_CHAT_MODEL,
@@ -75,7 +69,14 @@
 -    RECOMMENDED_TTS_OPTIONS,
 -)
 -from .entity import async_prepare_files_for_prompt
--
++from homeassistant.config_entries import ConfigEntry
++from homeassistant.const import CONF_API_KEY, Platform
++from homeassistant.core import HomeAssistant
++from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
++from homeassistant.helpers import config_validation as cv
++from homeassistant.helpers.httpx_client import get_async_client
++from homeassistant.helpers.typing import ConfigType
+ 
 -SERVICE_GENERATE_IMAGE = "generate_image"
 -SERVICE_GENERATE_CONTENT = "generate_content"
 +from .const import CONF_BASE_URL, DEFAULT_API_KEY, DOMAIN
@@ -301,7 +302,7 @@
          http_client=get_async_client(hass),
      )
  
-@@ -306,246 +54,10 @@
+@@ -306,227 +54,10 @@
  
  
  async def async_unload_entry(hass: HomeAssistant, entry: OpenAIConfigEntry) -> bool:
@@ -355,8 +356,8 @@
 -            DOMAIN,
 -            entry.entry_id,
 -        )
--        device = device_registry.async_get_device(
--            identifiers={(DOMAIN, entry.entry_id)}
+-        device = device_registry.async_get_device_by_identifier(
+-            (DOMAIN, entry.entry_id), entry.entry_id
 -        )
 -
 -        if conversation_entity_id is not None:
@@ -386,7 +387,7 @@
 -            # Device and entity registries will set the disabled_by flag to None
 -            # when moving a device or entity disabled by CONFIG_ENTRY to an enabled
 -            # config entry, but we want to set it to USER instead,
--            device_disabled_by = device.disabled_by
+-            device_disabled_by: dr.DeviceEntryDisabler | UndefinedType = UNDEFINED
 -            if (
 -                device.disabled_by is dr.DeviceEntryDisabler.CONFIG_ENTRY
 -                and not all_disabled
@@ -396,20 +397,9 @@
 -                device.id,
 -                disabled_by=device_disabled_by,
 -                new_identifiers={(DOMAIN, subentry.subentry_id)},
--                add_config_subentry_id=subentry.subentry_id,
--                add_config_entry_id=parent_entry.entry_id,
+-                new_config_entry_id=parent_entry.entry_id,
+-                new_config_subentry_id=subentry.subentry_id,
 -            )
--            if parent_entry.entry_id != entry.entry_id:
--                device_registry.async_update_device(
--                    device.id,
--                    remove_config_entry_id=entry.entry_id,
--                )
--            else:
--                device_registry.async_update_device(
--                    device.id,
--                    remove_config_entry_id=entry.entry_id,
--                    remove_config_subentry_id=None,
--                )
 -
 -        if not use_existing:
 -            await hass.config_entries.async_remove(entry.entry_id)
@@ -429,17 +419,9 @@
 -    LOGGER.debug("Migrating from version %s:%s", entry.version, entry.minor_version)
 -
 -    if entry.version == 2 and entry.minor_version == 1:
--        # Correct broken device migration in Home Assistant Core 2025.7.0b0-2025.7.0b1
--        device_registry = dr.async_get(hass)
--        for device in dr.async_entries_for_config_entry(
--            device_registry, entry.entry_id
--        ):
--            device_registry.async_update_device(
--                device.id,
--                remove_config_entry_id=entry.entry_id,
--                remove_config_subentry_id=None,
--            )
--
+-        # Devices left in both the config entry and its subentry by Home Assistant Core
+-        # 2025.7.0b0-2025.7.0b1 are collapsed onto the subentry by the device registry
+-        # migration, so there's nothing to correct here.
 -        hass.config_entries.async_update_entry(entry, minor_version=2)
 -
 -    if entry.version == 2 and entry.minor_version == 2:
