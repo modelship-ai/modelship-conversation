@@ -7,7 +7,7 @@ under the Apache License, Version 2.0.
 
   Upstream:   https://github.com/home-assistant/core
   Path:       homeassistant/components/openai_conversation
-  Merge base: tag 2026.9.2
+  Merge base: tag 2026.9.3
 
 The fork retargets the integration at a local Modelship server (an
 OpenAI-compatible API, including the /v1/responses adapter) by adding a
